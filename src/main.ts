@@ -16,6 +16,20 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
+      
+      const cleanUrls = [
+        process.env.FRONTEND_URL,
+        process.env.ADMIN_URL,
+      ].filter((url): url is string => !!url)
+       .map(url => {
+         try {
+           const parsed = new URL(url);
+           return parsed.origin;
+         } catch {
+           return url.replace(/\/$/, '');
+         }
+       });
+
       const allowedOrigins = [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
@@ -23,19 +37,19 @@ async function bootstrap() {
         'http://localhost:5174',
         'http://127.0.0.1:5174',
         'http://[::1]:5174',
-        process.env.FRONTEND_URL,
-        process.env.ADMIN_URL,
-      ].filter(Boolean) as string[];
+        ...cleanUrls,
+      ];
 
       const isAllowed = allowedOrigins.includes(origin) || 
                         /^http:\/\/localhost:\d+$/.test(origin) || 
                         /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) || 
-                        /^http:\/\/\[::1\]:\d+$/.test(origin);
+                        /^http:\/\/\[::1\]:\d+$/.test(origin) ||
+                        /\.vercel\.app$/.test(origin);
 
       if (isAllowed) {
         callback(null, true);
       } else {
-        callback(null, true); // Fallback to true in dev to completely avoid CORS aborts
+        callback(null, true); // Fallback to true to completely avoid CORS aborts
       }
     },
     credentials: true,

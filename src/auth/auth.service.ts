@@ -44,10 +44,11 @@ export class AuthService {
     const tokens = await this.generateTokens(user.id, user.role);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
 
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -64,10 +65,11 @@ export class AuthService {
     const tokens = await this.generateTokens(user.id, user.role);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
 
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -76,7 +78,12 @@ export class AuthService {
 
   async logout(userId: string, refreshToken: string, res: Response) {
     await this.prisma.refreshToken.deleteMany({ where: { userId, token: refreshToken } });
-    res.clearCookie('refreshToken');
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+    });
     return { message: 'Муваффақона баромад' };
   }
 
