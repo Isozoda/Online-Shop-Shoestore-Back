@@ -19,44 +19,112 @@ export class OrdersService {
     const productIds = dto.items.map((i) => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
+      include: { sizes: true },
     });
 
-    const validItems = dto.items.filter((item) => products.some((p) => p.id === item.productId));
-
-    if (validItems.length === 0) {
-      throw new BadRequestException('Маҳсулотҳои интихобшуда дар база ёфт нашуданд ё ба фурӯш рафтааст. Лутфан сабадро навсозӣ кунед.');
+    if (products.length === 0) {
+      throw new BadRequestException('Маҳсулотҳои интихобшуда дар база ёфт нашуданд. Лутфан сабадро навсозӣ кунед.');
     }
 
-    const orderItems = validItems.map((item) => {
+    const itemsByKey = dto.items.reduce((acc, item) => {
+      const key = `${item.productId}|||${item.size}`;
+      if (!acc[key]) {
+        acc[key] = { ...item };
+      } else {
+        acc[key].quantity += item.quantity;
+      }
+      return acc;
+    }, {} as Record<string, { productId: string; quantity: number; size: string; colorName: string }>);
+
+    const orderItems = Object.values(itemsByKey).map((item) => {
       const product = products.find((p) => p.id === item.productId);
-      const purchasePrice = product!.finalPrice ? Number(product!.finalPrice.toString()) : Number(product!.price.toString());
+      if (!product) {
+        throw new BadRequestException('Маҳсулот дар база ёфт нашуд. Лутфан сабадро навсозӣ кунед.');
+      }
+
+      const selectedSize = item.size || 'Standard';
+      const purchasePrice = product.finalPrice ? Number(product.finalPrice.toString()) : Number(product.price.toString());
+      const productSize = selectedSize !== 'Standard'
+        ? product.sizes.find((size) => size.size === selectedSize)
+        : undefined;
+
+      if (productSize) {
+        if (productSize.stock < item.quantity) {
+          throw new BadRequestException(`Маҳсулоти ${product.name_tj} дар андозаи ${selectedSize} дар саҳфа нест. Мавҷудият ${productSize.stock} дона аст.`);
+        }
+      } else {
+        if (product.stock < item.quantity) {
+          throw new BadRequestException(`Маҳсулоти ${product.name_tj} дар саҳфа нест. Мавҷудият ${product.stock} дона аст.`);
+        }
+      }
+
       return {
-        productId: item.productId,
-        quantity: item.quantity,
-        size: item.size,
-        colorName: item.colorName,
-        price: purchasePrice,
+        product,
+        productSize,
+        orderItem: {
+          productId: item.productId,
+          quantity: item.quantity,
+          size: selectedSize,
+          colorName: item.colorName,
+          price: purchasePrice,
+        },
       };
     });
 
-    const totalAmount = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const totalAmount = orderItems.reduce((sum, item) => sum + item.orderItem.price * item.orderItem.quantity, 0);
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const order = await this.prisma.order.create({
-      data: {
-        orderNumber,
-        clientName: dto.clientName,
-        clientPhone: dto.clientPhone,
-        clientAddress: dto.clientAddress,
-        contactMethod: dto.contactMethod,
-        note: dto.note,
-        totalAmount,
-        userId: dto.userId,
-        items: { create: orderItems },
-      },
-      include: {
-        items: { include: { product: { select: { name_ru: true, name_tj: true } } } },
-      },
+    const order = await this.prisma.$transaction(async (prisma) => {
+      const createdOrder = await prisma.order.create({
+        data: {
+          orderNumber,
+          clientName: dto.clientName,
+          clientPhone: dto.clientPhone,
+          clientAddress: dto.clientAddress,
+          contactMethod: dto.contactMethod,
+          note: dto.note,
+          totalAmount,
+          userId: dto.userId,
+          items: { create: orderItems.map((item) => item.orderItem) },
+        },
+        include: {
+          items: { include: { product: { select: { name_ru: true, name_tj: true } } } },
+        },
+      });
+
+      for (const itemData of orderItems) {
+        if (itemData.productSize) {
+          const sizeUpdate = await prisma.productSize.updateMany({
+            where: {
+              id: itemData.productSize.id,
+              stock: { gte: itemData.orderItem.quantity },
+            },
+            data: {
+              stock: { decrement: itemData.orderItem.quantity },
+            },
+          });
+
+          if (sizeUpdate.count === 0) {
+            throw new BadRequestException(`Маҳсулоти ${itemData.product.name_tj} дар андозаи ${itemData.orderItem.size} тамом шудааст.`);
+          }
+        }
+
+        const productUpdate = await prisma.product.updateMany({
+          where: {
+            id: itemData.product.id,
+            stock: { gte: itemData.orderItem.quantity },
+          },
+          data: {
+            stock: { decrement: itemData.orderItem.quantity },
+          },
+        });
+
+        if (productUpdate.count === 0) {
+          throw new BadRequestException(`Маҳсулоти ${itemData.product.name_tj} дар саҳфа нест.`);
+        }
+      }
+
+      return createdOrder;
     });
 
     try {
