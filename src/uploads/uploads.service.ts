@@ -27,8 +27,9 @@ export class UploadsService {
         .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toFile(outputPath);
-    } catch (error) {
-      throw new InternalServerErrorException('Қатогӣ ҳангоми коркарди тасвир');
+    } catch (error: any) {
+      console.error('Sharp error:', error);
+      throw new InternalServerErrorException(`Қатогӣ ҳангоми коркарди тасвир: ${error?.message || error}`);
     }
 
     if (file.path && fs.existsSync(file.path)) {
