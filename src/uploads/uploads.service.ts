@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import * as sharp from 'sharp';
+import * as sharpModule from 'sharp';
+const sharp = (sharpModule.default || sharpModule) as any;
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
