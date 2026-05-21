@@ -9,9 +9,9 @@ import {
   UseGuards,
   Post,
   UseInterceptors,
-  UploadedFiles,
+  UploadedFile,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -69,25 +69,15 @@ export class UsersController {
   @ApiOperation({ summary: 'Боргузории аватар' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: 'avatar', maxCount: 1 },
-        { name: 'file', maxCount: 1 },
-      ],
-      {
-        storage: memoryStorage(),
-        limits: { fileSize: 5 * 1024 * 1024 },
-      },
-    ),
+    FileInterceptor('avatar', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
   )
   async uploadAvatar(
     @CurrentUser('id') userId: string,
-    @UploadedFiles() files: {
-      avatar?: Express.Multer.File[];
-      file?: Express.Multer.File[];
-    },
+    @UploadedFile() file?: Express.Multer.File,
   ) {
-    const file = files.avatar?.[0] || files.file?.[0];
     if (!file) {
       throw new BadRequestException('Файл интихоб нашудааст');
     }
