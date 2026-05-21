@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Patch,
@@ -8,9 +9,9 @@ import {
   UseGuards,
   Post,
   UseInterceptors,
-  UploadedFile,
+  UploadedFiles,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -23,9 +24,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 import { ParseUUIDPipe } from '../common/pipes/parse-uuid.pipe';
 import { UploadsService } from '../uploads/uploads.service';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { memoryStorage } from 'multer';
 import { UsersQueryDto } from './dto/users-query.dto';
 import { Query } from '@nestjs/common';
 
@@ -70,19 +69,35 @@ export class UsersController {
   @ApiOperation({ summary: 'Боргузории аватар' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/avatars',
-        filename: (req, file, cb) => cb(null, `${uuidv4()}${extname(file.originalname)}`),
-      }),
-      fileFilter: (req, file, cb) => {
-        if (!file.mimetype.match(/^image\//)) return cb(new Error('Танҳо тасвир иҷозат дорад'), false);
-        cb(null, true);
+    FileFieldsInterceptor(
+      [
+        { name: 'avatar', maxCount: 1 },
+        { name: 'file', maxCount: 1 },
+      ],
+      {
+        storage: memoryStorage(),
+        limits: { fileSize: 5 * 1024 * 1024 },
       },
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
+    ),
   )
-  async uploadAvatar(@CurrentUser('id') userId: string, @UploadedFile() file: Express.Multer.File) {
+  async uploadAvatar(
+    @CurrentUser('id') userId: string,
+    @UploadedFiles() files: {
+      avatar?: Express.Multer.File[];
+      file?: Express.Multer.File[];
+    },
+  ) {
+    const file = files.avatar?.[0] || files.file?.[0];
+    if (!file) {
+      throw new BadRequestException('Файл интихоб нашудааст');
+    }
+    if (!file.mimetype?.startsWith('image/')) {
+      throw new BadRequestException('Танҳо тасвири тасдиқшуда иҷозат дода мешавад');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('Ҳадди бештари файл 5MB аст');
+    }
+
     const url = await this.uploadsService.processImage(file, 'avatars');
     return this.usersService.updateAvatar(userId, url);
   }

@@ -1,9 +1,7 @@
 import { Controller, Post, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { memoryStorage } from 'multer';
 import { UploadsService } from './uploads.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -23,10 +21,7 @@ export class UploadsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/temp',
-        filename: (req, file, cb) => cb(null, `${uuidv4()}${extname(file.originalname)}`),
-      }),
+      storage: memoryStorage(),
       fileFilter: (req, file, cb) => {
         if (!file.mimetype.match(/^image\//)) return cb(new Error('Танҳо тасвир иҷозат дорад'), false);
         cb(null, true);

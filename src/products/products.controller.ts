@@ -23,9 +23,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { ParseUUIDPipe } from '../common/pipes/parse-uuid.pipe';
 import { UploadsService } from '../uploads/uploads.service';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { memoryStorage } from 'multer';
 
 @ApiTags('products')
 @Controller('products')
@@ -103,10 +101,7 @@ export class ProductsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/products',
-        filename: (req, file, cb) => cb(null, `${uuidv4()}${extname(file.originalname)}`),
-      }),
+      storage: memoryStorage(),
       fileFilter: (req, file, cb) => {
         if (!file.mimetype.match(/^image\//)) return cb(new Error('Танҳо тасвир'), false);
         cb(null, true);

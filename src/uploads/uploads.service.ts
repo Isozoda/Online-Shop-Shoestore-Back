@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import * as sharp from 'sharp';
-import { join, extname } from 'path';
+import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 
@@ -17,13 +17,26 @@ export class UploadsService {
     const filename = `${uuidv4()}.webp`;
     const outputPath = join(uploadDir, filename);
 
-    await (sharp as any)(file.path || file.buffer)
-      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 80 })
-      .toFile(outputPath);
+    const source = file.path || file.buffer;
+    if (!source) {
+      throw new BadRequestException('Файли тасвир нодуруст аст');
+    }
+
+    try {
+      await (sharp as any)(source)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toFile(outputPath);
+    } catch (error) {
+      throw new InternalServerErrorException('Қатогӣ ҳангоми коркарди тасвир');
+    }
 
     if (file.path && fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        // ignore cleanup failures
+      }
     }
 
     return `/uploads/${folder}/${filename}`;
