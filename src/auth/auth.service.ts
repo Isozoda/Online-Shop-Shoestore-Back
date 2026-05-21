@@ -20,8 +20,8 @@ export class AuthService {
     if (exists) throw new ConflictException('Ин рақами телефон аллакай қайд шудааст');
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const userCount = await this.prisma.user.count();
-    const role = userCount === 0 ? 'ADMIN' : 'USER';
+    const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+    const role = adminCount === 0 ? 'ADMIN' : 'USER';
 
     const user = await this.prisma.user.create({
       data: { name: dto.name, phone: dto.phone, email: dto.email, passwordHash, role },
@@ -44,10 +44,10 @@ export class AuthService {
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isMatch) throw new UnauthorizedException('Рақам ё парол нодуруст');
 
-    // Auto-upgrade the first registered user to ADMIN
+    // Auto-upgrade if no ADMIN exists in the database
     let finalRole = user.role;
-    const userCount = await this.prisma.user.count();
-    if (userCount === 1 && user.role !== 'ADMIN') {
+    const adminCount = await this.prisma.user.count({ where: { role: 'ADMIN' } });
+    if (adminCount === 0 && user.role !== 'ADMIN') {
       await this.prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
       finalRole = 'ADMIN';
     }
